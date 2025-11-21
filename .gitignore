@@ -1,0 +1,5 @@
+.env
+*.exe
+*.log
+stress-tests/__pycache__/locust.cpython-314.pyc
+stress-tests/__pycache__/locustfile.cpython-314.pyc
