@@ -1,61 +1,75 @@
 from locust import HttpUser, task, between
 import random
 import datetime
-import time
 
-def unique_email():
-    return f"user_{int(time.time() * 1000)}_{random.randint(10000, 99999)}@example.com"
+class FitnessAppUser(HttpUser):
+    wait_time = between(1, 1)  # simulate a user with 1s wait between tasks
 
-def unique_name():
-    return f"User_{int(time.time() * 1000)}_{random.randint(10000, 99999)}"
+    def on_start(self):
+        """Run when a simulated user starts"""
+        self.user_id = None
+        self.workout_id = None
+        self.session_id = None
 
-def random_time():
-    return datetime.datetime.utcnow().isoformat() + "Z"
-
-class FitnessMonolithUser(HttpUser):
-    wait_time = between(1, 1)
-
-    @task
-    def workflow(self):
-        # 1. Create user
-        user_payload = {
-            "name": unique_name(),
-            "email": unique_email()
+    @task(2)
+    def create_user(self):
+        now = datetime.datetime.utcnow().isoformat() + "Z"
+        payload = {
+            "id": 0,
+            "name": f"User_{random.randint(1, 1000000)}",
+            "email": f"user_{random.randint(1, 1000000)}@example.com",
+            "created_at": now,
+            "updated_at": now
         }
-        user_resp = self.client.post(
-            "/api/v1/users",
-            json=user_payload,
-            name="Monolith - Create User"
-        )
-        if user_resp.status_code != 200:
+        response = self.client.post("/api/v1/users", json=payload, name="/api/v1/users")
+        if response.status_code == 200:
+            self.user_id = response.json().get("id")
+
+    @task(3)
+    def create_workout(self):
+        if not self.user_id:
             return
-
-        user_id = user_resp.json().get("id")
-
-        # 2. Create workout
-        workout_payload = {
-            "user_id": user_id,
-            "type": random.choice(["Yoga", "Cardio", "Strength"]),
-            "scheduled": random_time()
+        now = datetime.datetime.utcnow().isoformat() + "Z"
+        payload = {
+            "id": 0,
+            "type": f"Workout_{random.randint(1, 100)}",
+            "user_id": self.user_id,
+            "scheduled": now,
+            "created_at": now,
+            "updated_at": now
         }
-        workout_resp = self.client.post(
-            "/api/v1/workouts",
-            json=workout_payload,
-            name="Monolith - Create Workout"
-        )
-        if workout_resp.status_code != 200:
+        response = self.client.post("/api/v1/workouts", json=payload, name="/api/v1/workouts")
+        if response.status_code == 200:
+            self.workout_id = response.json().get("id")
+
+    @task(4)
+    def create_session(self):
+        if not self.workout_id:
             return
-
-        workout_id = workout_resp.json().get("id")
-
-        # 3. Create session
-        session_payload = {
-            "workout_id": workout_id,
-            "started_at": random_time(),
-            "finished_at": random_time()
+        now = datetime.datetime.utcnow()
+        payload = {
+            "id": 0,
+            "workout_id": self.workout_id,
+            "started_at": now.isoformat() + "Z",
+            "finished_at": (now + datetime.timedelta(minutes=random.randint(20, 90))).isoformat() + "Z",
+            "created_at": now.isoformat() + "Z",
+            "updated_at": now.isoformat() + "Z"
         }
-        self.client.post(
-            "/api/v1/sessions",
-            json=session_payload,
-            name="Monolith - Create Session"
-        )
+        response = self.client.post("/api/v1/sessions", json=payload, name="/api/v1/sessions")
+        if response.status_code == 200:
+            self.session_id = response.json().get("id")
+
+    @task(1)
+    def get_user(self):
+        if self.user_id:
+            self.client.get(f"/api/v1/users/{self.user_id}", name="/api/v1/users/:id")
+
+    @task(2)
+    def get_workout(self):
+        if self.workout_id:
+            self.client.get(f"/api/v1/workouts/{self.workout_id}", name="/api/v1/workouts/:id")
+
+    @task(3)
+    def get_session(self):
+        if self.session_id:
+            self.client.get(f"/api/v1/sessions/{self.session_id}", name="/api/v1/sessions/:id")
